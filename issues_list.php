@@ -6,7 +6,7 @@ $pdo = Database::connect();
 $error_message = "";
 
 // Fetch persons for dropdown list
-$persons_sql = "SELECT id, fname, lname FROM dsr_persons ORDER BY lname ASC";
+$persons_sql = "SELECT id, fname, lname FROM iss_persons ORDER BY lname ASC";
 $persons_stmt = $pdo->query($persons_sql);
 $persons = $persons_stmt->fetchAll(PDO::FETCH_ASSOC);
 
