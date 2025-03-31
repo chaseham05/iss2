@@ -166,8 +166,8 @@ if (!$comments) {
         <!-- "+" Button to Add Issue -->
         <div class="d-flex justify-content-between align-items-center mt-3">
             <h3>All Issues</h3>
-            <a href="create_issue.php" class="btn btn-success">+ Create New Issue</a>
-        </div>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createIssueModal">+ Create New Issue</button> <!-- inserted by chatgpt -->
+            </div>
 
         <table class="table table-striped table-sm mt-2">
             <thead class="table-dark">
@@ -351,6 +351,50 @@ if (!$comments) {
                 <?php endforeach; ?>
             </tbody>
         </table>
+        <!-- Create Issue Modal - inserted by chatgpt -->
+<div class="modal fade" id="createIssueModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" enctype="multipart/form-data">
+        <div class="modal-header">
+          <h5 class="modal-title">Create New Issue</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Title:</label>
+            <input type="text" name="title" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description:</label>
+            <textarea name="description" class="form-control" required></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Priority:</label>
+            <input type="text" name="status" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Open Date:</label>
+            <input type="date" name="open_date" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Close Date:</label>
+            <input type="date" name="close_date" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Attach PDF (Max 2MB):</label>
+            <input type="file" name="pdf_attachment" class="form-control" accept="application/pdf">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" name="create_issue" class="btn btn-primary">Create Issue</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
