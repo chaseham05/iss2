@@ -11,7 +11,6 @@ SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
 
-
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
@@ -36,7 +35,8 @@ CREATE TABLE `iss_issues` (
   `priority` varchar(255) NOT NULL,
   `org` varchar(255) NOT NULL,
   `project` varchar(255) NOT NULL,
-  `per_id` int(11) NOT NULL
+  `per_id` int(11) NOT NULL,
+  `pdf_attachment` varchar(255) DEFAULT NULL -- inserted by chatgpt
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --

@@ -37,8 +37,6 @@ if (isset($_POST['update_issue'])) {
             die("File size exceeds 2MB limit.");
         }
 
-        
-
         $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
         $uploadFileDir = './uploads/';
         $destPath = $uploadFileDir . $newFileName;
