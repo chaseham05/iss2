@@ -19,10 +19,7 @@ $persons = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
     <div class="container mt-3">
-        <h2 class="text-center">Issues List</h2>
-        <div class="d-flex justify-content-start mb-3">
-            <a href="persons_list.php" class="btn btn-secondary">View Persons List</a>
-        </div>
+        
 
         <h2 class="text-center">Persons List</h2>
 
