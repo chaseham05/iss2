@@ -44,9 +44,9 @@ CREATE TABLE `iss_issues` (
 --
 
 INSERT INTO `iss_issues` (`id`, `short_description`, `long_description`, `open_date`, `close_date`, `priority`, `org`, `project`, `per_id`) VALUES
-(1, 'cs451 solidity', 'The course, cs451, needs to be updated to include blockchain concepts, ethereum network, remix IDE and solidity programming language.', '2025-02-19', '0000-00-00', 'C', '', 'csis', 1),
-(2, 'cis355 login screen dfg df g', 'We need to develop the login functionality. We need to verify email before allowing login. So there needs to be a Join link and a verification process', '2025-03-19', '0000-00-00', '', '', 'csis', 1),
-(3, 'cis355 issues list screen', 'wdfg jsdlkf jgsldkf jglskdfj g;sldf gjs;ldkf jgl;sdkfj gl;sdkfj g;lsdfk jg;lskdf gjs;ldfk gjsl;dkf jgl;skdfj gls;dkfjg;lsdfkjg;lsdkf jgsl;dfg', '2025-03-19', '0000-00-00', 'Low', 'csisdept', 'csis', 1);
+(1, 'cs451 solidity', 'The course, cs451, needs to be updated to include blockchain concepts, ethereum network, remix IDE and solidity programming language.', '2025-02-19', '0000-00-00', 'High', '', 'csis', 1),
+(2, 'cis355 login screen', 'We need to develop the login functionality. We need to verify email before allowing login. So there needs to be a Join link and a verification process.', '2025-03-19', '0000-00-00', 'Medium', '', 'csis', 1),
+(3, 'cis355 issues list screen', 'The issues list screen needs to be updated to include sorting and filtering options.', '2025-03-19', '0000-00-00', 'Low', 'csisdept', 'csis', 1);
 
 --
 -- Indexes for dumped tables
