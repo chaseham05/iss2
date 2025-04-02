@@ -155,6 +155,7 @@ if (isset($_POST['add_comment'])) {
         $error_message = "Error adding comment: " . $e->getMessage();
     }
 }
+
 if (isset($_POST['create_comment'])) {
     $issue_id = $_POST['create_issue_id'];
     $comment = trim($_POST['create_comment_text']);
@@ -198,6 +199,23 @@ if (isset($_POST['delete_comment'])) {
     }
 }
 
+if (isset($_POST['update_comment'])) {
+    $id = $_POST['id'];
+    $short_comment = trim($_POST['short_comment']);
+    $long_comment = trim($_POST['long_comment']);
+    $per_id = $_POST['per_id'];
+
+    try {
+        $sql = "UPDATE iss_comments SET short_comment = ?, long_comment = ?, per_id = ? WHERE id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$short_comment, $long_comment, $per_id, $id]);
+
+        header("Location: issues_list.php");
+        exit();
+    } catch (PDOException $e) {
+        $error_message = "Error updating comment: " . $e->getMessage();
+    }
+}
 
 // Fetch all issues
 $sql = "SELECT * FROM iss_issues ORDER BY open_date DESC";
@@ -299,9 +317,16 @@ if (!$comments) {
 
                                     <hr>
                                     <h5>Comments</h5>
+                                    <button class="btn btn-success btn-sm mb-3" data-bs-toggle="modal" data-bs-target="#createCommentModal<?= $issue['id']; ?>">+ Add New Comment</button>
                                     <?php
-                                    // Fetch comments for the current issue
-                                    $comments_stmt = $conn->prepare("SELECT * FROM iss_comments WHERE iss_id = ? ORDER BY id DESC");
+                                    // Fetch comments for the current issue, including the author's name
+                                    $comments_stmt = $conn->prepare("
+                                        SELECT c.id AS comment_id, c.short_comment, c.long_comment, c.per_id, CONCAT(p.fname, ' ', p.lname) AS author_name 
+                                        FROM iss_comments c 
+                                        LEFT JOIN iss_persons p ON c.per_id = p.id 
+                                        WHERE c.iss_id = ? 
+                                        ORDER BY c.id DESC
+                                    ");
                                     $comments_stmt->execute([$issue['id']]);
                                     $issue_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -309,9 +334,69 @@ if (!$comments) {
                                         <ul class="list-group">
                                             <?php foreach ($issue_comments as $comment): ?>
                                                 <li class="list-group-item">
-                                                    <p><strong>Author:</strong> <?= htmlspecialchars($comment['per_id']); ?></p>
+                                                    <p><strong>Author:</strong> 
+                                                        <?= htmlspecialchars($comment['author_name'] ?? 'Unknown') . " (ID: " . htmlspecialchars($comment['per_id']) . ")"; ?>
+                                                    </p>
                                                     <p><?= htmlspecialchars($comment['short_comment']); ?></p>
+                                                    <div class="d-flex justify-content-end">
+                                                        <!-- Read Comment Button -->
+                                                        <button class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#readCommentModal<?= $comment['comment_id']; ?>">Read</button>
+                                                        <!-- Update Comment Button -->
+                                                        <button class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#updateCommentModal<?= $comment['comment_id']; ?>">Update</button>
+                                                        <!-- Delete Comment Button -->
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="id" value="<?= $comment['comment_id']; ?>">
+                                                            <button type="submit" name="delete_comment" class="btn btn-danger btn-sm">Delete</button>
+                                                        </form>
+                                                    </div>
                                                 </li>
+
+                                                <!-- Read Comment Modal -->
+                                                <div class="modal fade" id="readCommentModal<?= $comment['comment_id']; ?>" tabindex="-1">
+                                                    <div class="modal-dialog">
+                                                        <div class="modal-content">
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title">Comment Details</h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <p><strong>Author:</strong> <?= htmlspecialchars($comment['author_name'] ?? 'Unknown') . " (ID: " . htmlspecialchars($comment['per_id']) . ")"; ?></p>
+                                                                <p><strong>Full Comment:</strong></p>
+                                                                <p><?= nl2br(htmlspecialchars($comment['long_comment'])); ?></p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Update Comment Modal -->
+                                                <div class="modal fade" id="updateCommentModal<?= $comment['comment_id']; ?>" tabindex="-1">
+                                                    <div class="modal-dialog">
+                                                        <div class="modal-content">
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title">Update Comment</h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <form method="POST">
+                                                                    <input type="hidden" name="id" value="<?= $comment['comment_id']; ?>">
+                                                                    <div class="mb-3">
+                                                                        <label>Short Comment:</label>
+                                                                        <textarea name="short_comment" class="form-control" required><?= htmlspecialchars($comment['short_comment']); ?></textarea>
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label>Long Comment:</label>
+                                                                        <textarea name="long_comment" class="form-control" required><?= htmlspecialchars($comment['long_comment']); ?></textarea>
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label>Author (Person ID):</label>
+                                                                        <input type="text" name="per_id" class="form-control" value="<?= htmlspecialchars($comment['per_id']); ?>" required>
+                                                                    </div>
+                                                                    <button type="submit" name="update_comment" class="btn btn-primary">Save Changes</button>
+                                                                </form>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             <?php endforeach; ?>
                                         </ul>
                                     <?php else: ?>
@@ -364,94 +449,40 @@ if (!$comments) {
                         </div>
                     </div>
 
-                <?php endforeach; ?>
-
-            </tbody>
-        </table>
-
-        <h2 class="text-center mt-4">Comments</h2>
-        <!-- "+" Button to Add Comment -->
-        <div class="d-flex justify-content-between align-items-center mt-3">
-            <h3>All Comments</h3>
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createCommentModal">+ Create New Comment</button> <!-- inserted by chatgpt -->
-        </div>
-
-        <table class="table table-striped table-sm mt-2">
-            <thead class="table-dark">
-                <tr>
-                    <th>Issue ID</th>
-                    <th>Comment</th>
-                    <th>Author</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($comments as $comment): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($comment['iss_id']); ?></td>
-                        <td><?= htmlspecialchars($comment['short_comment']); ?></td>
-                        <td><?= htmlspecialchars($comment['per_id']); ?></td>
-                        <td>
-                            <!-- Read Button -->
-                            <button class="btn btn-info btn-sm" data-bs-toggle="modal"
-                                data-bs-target="#readComment<?= $comment['iss_id']; ?>">R</button>
-                            <!-- Update Button -->
-                            <button class="btn btn-warning btn-sm" data-bs-toggle="modal"
-                                data-bs-target="#updateComment<?= $comment['iss_id']; ?>">U</button>
-                            <!-- Delete Button -->
-                            <!-- Delete Comment Button -->
-                            <form method="POST" action="issues_list.php" style="display:inline;">
-                                <input type="hidden" name="id" value="<?= $comment['id']; ?>">
-                                <button type="submit" name="delete_comment" class="btn btn-danger btn-sm">D</button>
-                            </form>
-
-                        </td>
-                    </tr>
-
-                    <!-- Read Comment Modal -->
-                    <div class="modal fade" id="readComment<?= $comment['iss_id']; ?>" tabindex="-1">
+                    <!-- Create Comment Modal -->
+                    <div class="modal fade" id="createCommentModal<?= $issue['id']; ?>" tabindex="-1">
                         <div class="modal-dialog">
                             <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Comment Details</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <p><strong>Comment:</strong> <?= htmlspecialchars($comment['short_comment']); ?></p>
-                                    <p><strong>Author:</strong> <?= htmlspecialchars($comment['per_id']); ?></p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Update Comment Modal -->
-                    <div class="modal fade" id="updateComment<?= $comment['iss_id']; ?>" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Update Comment</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <form method="POST">
-                                        <input type="hidden" name="id" value="<?= $comment['iss_id']; ?>">
-                                        <label>Comment:</label>
-                                        <textarea name="short_comment"
-                                            required><?= htmlspecialchars($comment['short_comment']); ?></textarea><br>
-                                        <label>Author:</label>
-                                        <input type="text" name="per_id"
-                                            value="<?= htmlspecialchars($comment['per_id']); ?>" required><br>
-                                        <button type="submit" name="update_comment" class="btn btn-primary">Save
-                                            Changes</button>
-                                    </form>
-                                </div>
+                                <form method="POST">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Add New Comment</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <input type="hidden" name="create_issue_id" value="<?= $issue['id']; ?>">
+                                        <div class="mb-3">
+                                            <label class="form-label">Comment:</label>
+                                            <textarea name="create_comment_text" class="form-control" required></textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Author (Person ID):</label>
+                                            <input type="text" name="create_comment_author" class="form-control" required>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="submit" name="create_comment" class="btn btn-primary">Add Comment</button>
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
 
                 <?php endforeach; ?>
+
             </tbody>
         </table>
+
          <!-- Create Issue Modal -->
         <div class="modal fade" id="createIssueModal" tabindex="-1">
             <div class="modal-dialog">
