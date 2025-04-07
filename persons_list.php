@@ -9,6 +9,12 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// Check if the user is an admin
+if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') {
+    header("Location: issues_list.php"); // Redirect non-admin users to the issues list
+    exit();
+}
+
 $conn = Database::connect(); // Establish the database connection
 $error_message = "";
 

@@ -24,46 +24,49 @@ if (isset($_POST['update_issue'])) {
     $project = trim($_POST['project']);
     $per_id = $_POST['per_id'];
 
-    // inserted by chatgpt — PDF Upload Handling
-    $attachmentPath = null;
+    // Check if the user is an admin or the owner of the issue
+    $stmt = $conn->prepare("SELECT per_id FROM iss_issues WHERE id = ?");
+    $stmt->execute([$id]);
+    $issue_owner = $stmt->fetchColumn();
 
+    if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $issue_owner) {
+        die("Unauthorized action. You do not have permission to update this issue.");
+    }
+
+    // Handle PDF upload
+    $attachmentPath = null;
     if (isset($_FILES['pdf_attachment']) && $_FILES['pdf_attachment']['error'] === UPLOAD_ERR_OK) {
         $fileTmpPath = $_FILES['pdf_attachment']['tmp_name'];
         $fileName = $_FILES['pdf_attachment']['name'];
-        $fileSize = $_FILES['pdf_attachment']['size'];
-        $fileType = $_FILES['pdf_attachment']['type'];
-        $fileNameCmps = explode(".", $fileName);
         $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
         if ($fileExtension !== 'pdf') {
             die("Only PDF files are allowed.");
         }
 
-        if ($fileSize > 2 * 1024 * 1024) {
+        if ($_FILES['pdf_attachment']['size'] > 2 * 1024 * 1024) {
             die("File size exceeds 2MB limit.");
         }
 
-        $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
-        $uploadFileDir = './uploads/';
-        $destPath = $uploadFileDir . $newFileName;
-
-        if (!is_dir($uploadFileDir)) {
-            mkdir($uploadFileDir, 0755, true);
+        $uploadDir = './uploads/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
         }
 
-        if (move_uploaded_file($fileTmpPath, $destPath)) {
-            $attachmentPath = $destPath;
-        } else {
+        $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
+        $attachmentPath = $uploadDir . $newFileName;
+
+        if (!move_uploaded_file($fileTmpPath, $attachmentPath)) {
             die("Error moving the uploaded file.");
         }
     } else {
-        // fallback: use existing attachment if updating
+        // Use existing attachment if no new file is uploaded
         $existing = $conn->prepare("SELECT pdf_attachment FROM iss_issues WHERE id = ?");
         $existing->execute([$id]);
         $attachmentPath = $existing->fetchColumn();
     }
 
-    // inserted by chatgpt — updated query with PDF
+    // Update the issue
     try {
         $sql = "UPDATE iss_issues SET short_description=?, long_description=?, open_date=?, close_date=?, priority=?, org=?, project=?, per_id=?, pdf_attachment=? WHERE id=?";
         $stmt = $conn->prepare($sql);
@@ -135,6 +138,16 @@ if (isset($_POST['create_issue'])) {
 if (isset($_POST['delete_issue'])) {
     $id = $_POST['id'];
 
+    // Check if the user is an admin or the owner of the issue
+    $stmt = $conn->prepare("SELECT per_id FROM iss_issues WHERE id = ?");
+    $stmt->execute([$id]);
+    $issue_owner = $stmt->fetchColumn();
+
+    if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $issue_owner) {
+        die("Unauthorized action. You do not have permission to delete this issue.");
+    }
+
+    // Delete the issue
     try {
         $sql = "DELETE FROM iss_issues WHERE id=?";
         $stmt = $conn->prepare($sql);
@@ -210,13 +223,20 @@ if (isset($_POST['delete_comment'])) {
 if (isset($_POST['update_comment'])) {
     $id = $_POST['id'];
     $short_comment = trim($_POST['short_comment']);
-    $long_comment = trim($_POST['long_comment']);
-    $per_id = $_POST['per_id'];
+
+    // Check if the user is an admin or the author of the comment
+    $stmt = $conn->prepare("SELECT per_id FROM iss_comments WHERE id = ?");
+    $stmt->execute([$id]);
+    $comment_owner = $stmt->fetchColumn();
+
+    if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $comment_owner) {
+        die("Unauthorized action. You do not have permission to update this comment.");
+    }
 
     try {
-        $sql = "UPDATE iss_comments SET short_comment = ?, long_comment = ?, per_id = ? WHERE id = ?";
+        $sql = "UPDATE iss_comments SET short_comment = ? WHERE id = ?";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$short_comment, $long_comment, $per_id, $id]);
+        $stmt->execute([$short_comment, $id]);
 
         header("Location: issues_list.php");
         exit();
@@ -243,6 +263,7 @@ if (!$comments) {
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Issues List - DSR</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -250,227 +271,230 @@ if (!$comments) {
 <body>
     <div class="container mt-3">
         <!-- Header Section -->
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="text-center">Issues List</h2>
-            <form method="POST" action="logout.php">
-                <button type="submit" class="btn btn-danger">Logout</button>
-            </form>
+        <div class="row mb-3">
+            <div class="col-12 d-flex justify-content-between align-items-center">
+                <h2 class="text-center">Issues List</h2>
+                <form method="POST" action="logout.php">
+                    <button type="submit" class="btn btn-danger">Logout</button>
+                </form>
+            </div>
         </div>
 
         <!-- Row with "All Issues", "Go to Persons List", and "Create New Issue" -->
-        <div class="d-flex justify-content-between align-items-center mt-3">
-            <h3>All Issues</h3>
-            <?php if (isset($_SESSION['admin']) && $_SESSION['admin'] === 'Y'): ?>
-                <a href="persons_list.php" class="btn btn-secondary">Go to Persons List</a>
-            <?php endif; ?>
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createIssueModal">+ Create New Issue</button>
+        <div class="row mt-3">
+            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center">
+                <h3>All Issues</h3>
+                <div class="d-flex flex-wrap gap-2">
+                    <?php if (isset($_SESSION['admin']) && $_SESSION['admin'] === 'Y'): ?>
+                        <a href="persons_list.php" class="btn btn-secondary">Go to Persons List</a>
+                    <?php endif; ?>
+                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createIssueModal">+ Create New Issue</button>
+                </div>
+            </div>
         </div>
 
-        <table class="table table-striped table-sm mt-2">
-            <thead class="table-dark">
-                <tr>
-                    <th>ID</th>
-                    <th>Short Description</th>
-                    <th>Open Date</th>
-                    <th>Close Date</th>
-                    <th>Priority</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($issues as $issue): ?>
+        <!-- Responsive Table -->
+        <div class="table-responsive mt-2">
+            <table class="table table-striped table-sm">
+                <thead class="table-dark">
                     <tr>
-                        <td><?= htmlspecialchars($issue['id']); ?></td>
-                        <td><?= htmlspecialchars($issue['short_description']); ?></td>
-                        <td><?= htmlspecialchars($issue['open_date']); ?></td>
-                        <td><?= htmlspecialchars($issue['close_date']); ?></td>
-                        <td><?= htmlspecialchars($issue['priority']); ?></td>
-                        <td>
-                            <!-- Read Button -->
-                            <button class="btn btn-info btn-sm" data-bs-toggle="modal"
-                                data-bs-target="#readIssue<?= $issue['id']; ?>">R</button>
-
-                            <!-- Update Button -->
-                            <button class="btn btn-warning btn-sm" data-bs-toggle="modal"
-                                data-bs-target="#updateIssue<?= $issue['id']; ?>"
-                                <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>
-                                U
-                            </button>
-
-                            <!-- Delete Button -->
-                            <form method="POST" style="display:inline;">
-                                <input type="hidden" name="id" value="<?= $issue['id']; ?>">
-                                <button type="submit" name="delete_issue" class="btn btn-danger btn-sm"
-                                    <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>
-                                    D
-                                </button>
-                            </form>
-
-                            <?php if (!empty($issue['pdf_attachment'])): ?>
-                                <a href="<?= htmlspecialchars($issue['pdf_attachment']); ?>" target="_blank"
-                                    class="btn btn-outline-secondary btn-sm">View PDF</a>
-                            <?php endif; ?>
-                        </td>
+                        <th>ID</th>
+                        <th>Short Description</th>
+                        <th>Open Date</th>
+                        <th>Close Date</th>
+                        <th>Priority</th>
+                        <th>Actions</th>
                     </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($issues as $issue): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($issue['id']); ?></td>
+                            <td><?= htmlspecialchars($issue['short_description']); ?></td>
+                            <td><?= htmlspecialchars($issue['open_date']); ?></td>
+                            <td><?= htmlspecialchars($issue['close_date']); ?></td>
+                            <td><?= htmlspecialchars($issue['priority']); ?></td>
+                            <td>
+                                <!-- Read Button -->
+                                <button class="btn btn-info btn-sm" data-bs-toggle="modal"
+                                    data-bs-target="#readIssue<?= $issue['id']; ?>">R</button>
 
-                    <!-- Read Issue Modal -->
-                    <div class="modal fade" id="readIssue<?= $issue['id']; ?>" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Issue Details</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <p><strong>ID:</strong> <?= htmlspecialchars($issue['id']); ?></p>
-                                    <p><strong>Short Description:</strong> <?= htmlspecialchars($issue['short_description']); ?></p>
-                                    <p><strong>Long Description:</strong> <?= htmlspecialchars($issue['long_description']); ?></p>
-                                    <p><strong>Open Date:</strong> <?= htmlspecialchars($issue['open_date']); ?></p>
-                                    <p><strong>Close Date:</strong> <?= htmlspecialchars($issue['close_date']); ?></p>
-                                    <p><strong>Priority:</strong> <?= htmlspecialchars($issue['priority']); ?></p>
-                                    <p><strong>Created By (Person ID):</strong> <?= htmlspecialchars($issue['per_id']); ?></p>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                                <!-- Update Button -->
+                                <button class="btn btn-warning btn-sm" data-bs-toggle="modal"
+                                    data-bs-target="#updateIssue<?= $issue['id']; ?>"
+                                    <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>
+                                    U
+                                </button>
 
-                    <!-- Update Issue Modal -->
-                    <div class="modal fade" id="updateIssue<?= $issue['id']; ?>" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <form method="POST" enctype="multipart/form-data">
+                                <!-- Delete Button -->
+                                <form method="POST" style="display:inline;">
+                                    <input type="hidden" name="id" value="<?= $issue['id']; ?>">
+                                    <button type="submit" name="delete_issue" class="btn btn-danger btn-sm"
+                                        <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>
+                                        D
+                                    </button>
+                                </form>
+
+                                <?php if (!empty($issue['pdf_attachment'])): ?>
+                                    <a href="<?= htmlspecialchars($issue['pdf_attachment']); ?>" target="_blank"
+                                        class="btn btn-outline-secondary btn-sm">View PDF</a>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+
+                        <!-- Read Issue Modal -->
+                        <div class="modal fade" id="readIssue<?= $issue['id']; ?>" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
                                     <div class="modal-header">
-                                        <h5 class="modal-title">Update Issue</h5>
+                                        <h5 class="modal-title">Issue Details</h5>
                                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                     </div>
                                     <div class="modal-body">
-                                        <input type="hidden" name="id" value="<?= $issue['id']; ?>">
-                                        <div class="mb-3">
-                                            <label class="form-label">Short Description:</label>
-                                            <input type="text" name="short_description" class="form-control" value="<?= htmlspecialchars($issue['short_description']); ?>" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Long Description:</label>
-                                            <textarea name="long_description" class="form-control" required><?= htmlspecialchars($issue['long_description']); ?></textarea>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Priority:</label>
-                                            <select name="priority" class="form-control" required>
-                                                <option value="Low" <?= $issue['priority'] === 'Low' ? 'selected' : ''; ?>>Low</option>
-                                                <option value="Medium" <?= $issue['priority'] === 'Medium' ? 'selected' : ''; ?>>Medium</option>
-                                                <option value="High" <?= $issue['priority'] === 'High' ? 'selected' : ''; ?>>High</option>
-                                            </select>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Open Date:</label>
-                                            <input type="date" name="open_date" class="form-control" value="<?= htmlspecialchars($issue['open_date']); ?>" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Close Date:</label>
-                                            <input type="date" name="close_date" class="form-control" value="<?= htmlspecialchars($issue['close_date']); ?>">
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Attach PDF (Max 2MB):</label>
-                                            <input type="file" name="pdf_attachment" class="form-control" accept="application/pdf">
-                                            <?php if (!empty($issue['pdf_attachment'])): ?>
-                                                <small class="text-muted">Current File: <a href="<?= htmlspecialchars($issue['pdf_attachment']); ?>" target="_blank">View PDF</a></small>
-                                            <?php endif; ?>
-                                        </div>
+                                        <p><strong>ID:</strong> <?= htmlspecialchars($issue['id']); ?></p>
+                                        <p><strong>Short Description:</strong> <?= htmlspecialchars($issue['short_description']); ?></p>
+                                        <p><strong>Long Description:</strong> <?= htmlspecialchars($issue['long_description']); ?></p>
+                                        <p><strong>Open Date:</strong> <?= htmlspecialchars($issue['open_date']); ?></p>
+                                        <p><strong>Close Date:</strong> <?= htmlspecialchars($issue['close_date']); ?></p>
+                                        <p><strong>Priority:</strong> <?= htmlspecialchars($issue['priority']); ?></p>
+                                        <p><strong>Created By (Person ID):</strong> <?= htmlspecialchars($issue['per_id']); ?></p>
+
+                                        <!-- Comments Section -->
+                                        <hr>
+                                        <h6>Comments:</h6>
+                                        <?php
+                                        // Fetch comments for the current issue
+                                        $stmt = $conn->prepare("SELECT * FROM iss_comments WHERE iss_id = ? ORDER BY id ASC");
+                                        $stmt->execute([$issue['id']]);
+                                        $issue_comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                        if (!empty($issue_comments)) {
+                                            foreach ($issue_comments as $comment) {
+                                                echo '<div class="mb-2">';
+                                                echo '<p><strong>Comment ID:</strong> ' . htmlspecialchars($comment['id']) . '</p>';
+                                                echo '<p><strong>Comment:</strong> ' . htmlspecialchars($comment['short_comment']) . '</p>';
+                                                echo '<p><strong>Author (Person ID):</strong> ' . htmlspecialchars($comment['per_id']) . '</p>';
+
+                                                // Check if the user is an admin or the author of the comment
+                                                if (isset($_SESSION['admin']) && $_SESSION['admin'] === 'Y' || $_SESSION['user_id'] === $comment['per_id']) {
+                                                    // Update Button
+                                                    echo '<button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#updateComment' . $comment['id'] . '">Update</button>';
+
+                                                    // Delete Button
+                                                    echo '<form method="POST" style="display:inline;" class="ms-2">';
+                                                    echo '<input type="hidden" name="id" value="' . htmlspecialchars($comment['id']) . '">';
+                                                    echo '<button type="submit" name="delete_comment" class="btn btn-danger btn-sm">Delete</button>';
+                                                    echo '</form>';
+                                                }
+
+                                                echo '<hr>';
+                                                echo '</div>';
+
+                                                // Update Comment Modal
+                                                echo '<div class="modal fade" id="updateComment' . $comment['id'] . '" tabindex="-1">';
+                                                echo '    <div class="modal-dialog modal-dialog-centered">';
+                                                echo '        <div class="modal-content">';
+                                                echo '            <form method="POST">';
+                                                echo '                <div class="modal-header">';
+                                                echo '                    <h5 class="modal-title">Update Comment</h5>';
+                                                echo '                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>';
+                                                echo '                </div>';
+                                                echo '                <div class="modal-body">';
+                                                echo '                    <input type="hidden" name="id" value="' . htmlspecialchars($comment['id']) . '">';
+                                                echo '                    <div class="mb-3">';
+                                                echo '                        <label class="form-label">Comment:</label>';
+                                                echo '                        <textarea name="short_comment" class="form-control" required>' . htmlspecialchars($comment['short_comment']) . '</textarea>';
+                                                echo '                    </div>';
+                                                echo '                </div>';
+                                                echo '                <div class="modal-footer">';
+                                                echo '                    <button type="submit" name="update_comment" class="btn btn-primary">Update</button>';
+                                                echo '                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>';
+                                                echo '                </div>';
+                                                echo '            </form>';
+                                                echo '        </div>';
+                                                echo '    </div>';
+                                                echo '</div>';
+                                            }
+                                        } else {
+                                            echo '<p>No comments available for this issue.</p>';
+                                        }
+                                        ?>
+
+                                        <!-- Add Comment Section -->
+                                        <hr>
+                                        <h6>Add a Comment:</h6>
+                                        <form method="POST">
+                                            <input type="hidden" name="issue_id" value="<?= $issue['id']; ?>">
+                                            <input type="hidden" name="author" value="<?= $_SESSION['user_id']; ?>">
+                                            <div class="mb-3">
+                                                <label class="form-label">Comment:</label>
+                                                <textarea name="comment" class="form-control" required></textarea>
+                                            </div>
+                                            <button type="submit" name="add_comment" class="btn btn-primary">Add Comment</button>
+                                        </form>
                                     </div>
                                     <div class="modal-footer">
-                                        <button type="submit" name="update_issue" class="btn btn-primary">Update Issue</button>
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                                     </div>
-                                </form>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
 
-         <!-- Create Issue Modal -->
-        <div class="modal fade" id="createIssueModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form method="POST" enctype="multipart/form-data">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Create New Issue</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <!-- Update Issue Modal -->
+                        <div class="modal fade" id="updateIssue<?= $issue['id']; ?>" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <form method="POST" enctype="multipart/form-data">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Update Issue</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <input type="hidden" name="id" value="<?= $issue['id']; ?>">
+                                            <div class="mb-3">
+                                                <label class="form-label">Short Description:</label>
+                                                <input type="text" name="short_description" class="form-control" value="<?= htmlspecialchars($issue['short_description']); ?>" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Long Description:</label>
+                                                <textarea name="long_description" class="form-control" required><?= htmlspecialchars($issue['long_description']); ?></textarea>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Priority:</label>
+                                                <select name="priority" class="form-control" required>
+                                                    <option value="Low" <?= $issue['priority'] === 'Low' ? 'selected' : ''; ?>>Low</option>
+                                                    <option value="Medium" <?= $issue['priority'] === 'Medium' ? 'selected' : ''; ?>>Medium</option>
+                                                    <option value="High" <?= $issue['priority'] === 'High' ? 'selected' : ''; ?>>High</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Open Date:</label>
+                                                <input type="date" name="open_date" class="form-control" value="<?= htmlspecialchars($issue['open_date']); ?>" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Close Date:</label>
+                                                <input type="date" name="close_date" class="form-control" value="<?= htmlspecialchars($issue['close_date']); ?>">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Attach PDF (Max 2MB):</label>
+                                                <input type="file" name="pdf_attachment" class="form-control" accept="application/pdf">
+                                                <?php if (!empty($issue['pdf_attachment'])): ?>
+                                                    <small class="text-muted">Current File: <a href="<?= htmlspecialchars($issue['pdf_attachment']); ?>" target="_blank">View PDF</a></small>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" name="update_issue" class="btn btn-primary">Update Issue</button>
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Title:</label>
-                                <input type="text" name="title" class="form-control" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Description:</label>
-                                <textarea name="description" class="form-control" required></textarea>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Priority:</label>
-                                <select name="status" class="form-control" required>
-                                    <option value="Low">Low</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="High">High</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Open Date:</label>
-                                <input type="date" name="open_date" class="form-control" value="<?= date('Y-m-d'); ?>" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Close Date:</label>
-                                <input type="date" name="close_date" class="form-control">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Attach PDF (Max 2MB):</label>
-                                <input type="file" name="pdf_attachment" class="form-control" accept="application/pdf">
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" name="create_issue" class="btn btn-primary">Create Issue</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
-        <!-- Create Comment Modal - inserted by chatgpt -->
-        <div class="modal fade" id="createCommentModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form method="POST">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Add New Comment</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Issue ID:</label>
-                                <input type="number" name="create_issue_id" class="form-control" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Comment:</label>
-                                <textarea name="create_comment_text" class="form-control" required></textarea>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Author (Person ID):</label>
-                                <input type="text" name="create_comment_author" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" name="create_comment" class="btn btn-primary">Add Comment</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
