@@ -2,6 +2,13 @@
 session_start();
 include '../database/database.php'; // Include the database connection
 
+// Check if the user is logged in
+if (!isset($_SESSION['user_id'])) {
+    session_destroy(); // Destroy the session if not logged in
+    header("Location: login.php");
+    exit();
+}
+
 $conn = Database::connect(); // Establish the database connection
 $error_message = "";
 
@@ -19,13 +26,14 @@ $persons = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
     <div class="container mt-3">
-        
-
         <h2 class="text-center">Persons List</h2>
 
         <!-- Back to Issues List Link -->
-        <div class="d-flex justify-content-start mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
             <a href="issues_list.php" class="btn btn-secondary">Back to Issues List</a>
+            <form method="POST" action="logout.php">
+                <button type="submit" class="btn btn-danger">Logout</button>
+            </form>
         </div>
 
         <table class="table table-striped table-sm mt-2">
