@@ -11,6 +11,76 @@ require '../database/database.php'; // Include the database connection
 $conn = Database::connect(); // Establish the database connection
 $error_message = "";
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['update_comment'])) {
+        $id = $_POST['id'];
+        $short_comment = trim($_POST['short_comment']);
+
+        // Check if the user is an admin or the author of the comment
+        $stmt = $conn->prepare("SELECT per_id FROM iss_comments WHERE id = ?");
+        $stmt->execute([$id]);
+        $comment_owner = $stmt->fetchColumn();
+
+        if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $comment_owner) {
+            die("Unauthorized action. You do not have permission to update this comment.");
+        }
+
+        try {
+            $sql = "UPDATE iss_comments SET short_comment = ? WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$short_comment, $id]);
+
+            header("Location: issues_list.php");
+            exit();
+        } catch (PDOException $e) {
+            echo "Error updating comment: " . $e->getMessage();
+            exit();
+        }
+    }
+
+    // Add Comment Handler
+    if (isset($_POST['add_comment'])) {
+        $issue_id = $_POST['issue_id'];
+        $comment = trim($_POST['comment']);
+        $author = $_POST['author'];
+
+        try {
+            $sql = "INSERT INTO iss_comments (iss_id, short_comment, per_id) VALUES (?, ?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$issue_id, $comment, $author]);
+
+            header("Location: issues_list.php");
+            exit();
+        } catch (PDOException $e) {
+            $error_message = "Error adding comment: " . $e->getMessage();
+        }
+    }
+
+    // Delete Comment Handler
+    if (isset($_POST['delete_comment'])) {
+        $id = $_POST['id'];
+
+        // Check if the user is an admin or the author of the comment
+        $stmt = $conn->prepare("SELECT per_id FROM iss_comments WHERE id = ?");
+        $stmt->execute([$id]);
+        $comment_owner = $stmt->fetchColumn();
+
+        if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $comment_owner) {
+            die("Unauthorized action. You do not have permission to delete this comment.");
+        }
+
+        try {
+            $sql = "DELETE FROM iss_comments WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$id]);
+
+            header("Location: issues_list.php");
+            exit();
+        } catch (PDOException $e) {
+            $error_message = "Error deleting comment: " . $e->getMessage();
+        }
+    }
+}
 
 // Handle issue operations (Update, Delete, Add Comment, Delete Comment, Create Issue)
 if (isset($_POST['update_issue'])) {
@@ -160,91 +230,6 @@ if (isset($_POST['delete_issue'])) {
     }
 }
 
-if (isset($_POST['add_comment'])) {
-    $issue_id = $_POST['issue_id'];
-    $comment = trim($_POST['comment']);
-    $author = $_POST['author'];
-
-    try {
-        $sql = "INSERT INTO iss_comments (iss_id, short_comment, per_id) VALUES (?, ?, ?)";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$issue_id, $comment, $author]);
-
-        header("Location: issues_list.php");
-        exit();
-    } catch (PDOException $e) {
-        $error_message = "Error adding comment: " . $e->getMessage();
-    }
-}
-
-if (isset($_POST['create_comment'])) {
-    $issue_id = $_POST['create_issue_id'];
-    $comment = trim($_POST['create_comment_text']);
-    $author = $_POST['create_comment_author'];
-
-    try {
-        $sql = "INSERT INTO iss_comments (iss_id, short_comment, per_id) VALUES (?, ?, ?)";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$issue_id, $comment, $author]);
-
-        header("Location: issues_list.php");
-        exit();
-    } catch (PDOException $e) {
-        $error_message = "Error creating comment: " . $e->getMessage();
-    }
-}
-
-if (isset($_POST['delete_comment'])) {
-    if (!empty($_POST['id'])) {
-        $id = $_POST['id'];
-        echo "Attempting to delete comment with ID: $id<br>";
-
-        try {
-            $sql = "DELETE FROM iss_comments WHERE id=?";
-            $stmt = $conn->prepare($sql);
-            $stmt->execute([$id]);
-
-            if ($stmt->rowCount() > 0) {
-                echo "Comment deleted successfully.<br>";
-            } else {
-                echo "Comment with ID $id not found.<br>";
-            }
-
-            header("Location: issues_list.php");
-            exit();
-        } catch (PDOException $e) {
-            echo "Error deleting comment: " . $e->getMessage();
-        }
-    } else {
-        echo "No comment ID provided for deletion.";
-    }
-}
-
-if (isset($_POST['update_comment'])) {
-    $id = $_POST['id'];
-    $short_comment = trim($_POST['short_comment']);
-
-    // Check if the user is an admin or the author of the comment
-    $stmt = $conn->prepare("SELECT per_id FROM iss_comments WHERE id = ?");
-    $stmt->execute([$id]);
-    $comment_owner = $stmt->fetchColumn();
-
-    if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $comment_owner) {
-        die("Unauthorized action. You do not have permission to update this comment.");
-    }
-
-    try {
-        $sql = "UPDATE iss_comments SET short_comment = ? WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$short_comment, $id]);
-
-        header("Location: issues_list.php");
-        exit();
-    } catch (PDOException $e) {
-        $error_message = "Error updating comment: " . $e->getMessage();
-    }
-}
-
 // Fetch all issues
 $sql = "SELECT * FROM iss_issues ORDER BY open_date DESC";
 $issues = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
@@ -364,57 +349,37 @@ if (!$comments) {
                                         <h6>Comments:</h6>
                                         <?php
                                         // Fetch comments for the current issue
-                                        $stmt = $conn->prepare("SELECT * FROM iss_comments WHERE iss_id = ? ORDER BY id ASC");
+                                        $stmt = $conn->prepare("
+                                            SELECT c.*, CONCAT(p.fname, ' ', p.lname) AS author_name 
+                                            FROM iss_comments c 
+                                            LEFT JOIN iss_persons p ON c.per_id = p.id 
+                                            WHERE c.iss_id = ? 
+                                            ORDER BY c.id ASC
+                                        ");
                                         $stmt->execute([$issue['id']]);
                                         $issue_comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                         if (!empty($issue_comments)) {
-                                            foreach ($issue_comments as $comment) {
-                                                echo '<div class="mb-2">';
-                                                echo '<p><strong>Comment ID:</strong> ' . htmlspecialchars($comment['id']) . '</p>';
-                                                echo '<p><strong>Comment:</strong> ' . htmlspecialchars($comment['short_comment']) . '</p>';
-                                                echo '<p><strong>Author (Person ID):</strong> ' . htmlspecialchars($comment['per_id']) . '</p>';
+                                            foreach ($issue_comments as $comment): ?>
+                                                <div class="mb-2">
+                                                    <p><strong>Comment ID:</strong> <?= htmlspecialchars($comment['id']); ?></p>
+                                                    <p><strong>Comment:</strong> <?= htmlspecialchars($comment['short_comment']); ?></p>
+                                                    <p><strong>Author:</strong> <?= htmlspecialchars($comment['author_name'] ?? 'Unknown'); ?> (ID: <?= htmlspecialchars($comment['per_id']); ?>)</p>
 
-                                                // Check if the user is an admin or the author of the comment
-                                                if (isset($_SESSION['admin']) && $_SESSION['admin'] === 'Y' || $_SESSION['user_id'] === $comment['per_id']) {
-                                                    // Update Button
-                                                    echo '<button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#updateComment' . $comment['id'] . '">Update</button>';
+                                                    <?php if (isset($_SESSION['admin']) && $_SESSION['admin'] === 'Y' || $_SESSION['user_id'] === $comment['per_id']): ?>
+                                                        <!-- Update Button -->
+                                                        <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#updateComment<?= $comment['id']; ?>">Update</button>
 
-                                                    // Delete Button
-                                                    echo '<form method="POST" style="display:inline;" class="ms-2">';
-                                                    echo '<input type="hidden" name="id" value="' . htmlspecialchars($comment['id']) . '">';
-                                                    echo '<button type="submit" name="delete_comment" class="btn btn-danger btn-sm">Delete</button>';
-                                                    echo '</form>';
-                                                }
+                                                        <!-- Delete Button -->
+                                                        <form method="POST" style="display:inline;" class="ms-2">
+                                                            <input type="hidden" name="id" value="<?= htmlspecialchars($comment['id']); ?>">
+                                                            <button type="submit" name="delete_comment" class="btn btn-danger btn-sm">Delete</button>
+                                                        </form>
+                                                    <?php endif; ?>
 
-                                                echo '<hr>';
-                                                echo '</div>';
-
-                                                // Update Comment Modal
-                                                echo '<div class="modal fade" id="updateComment' . $comment['id'] . '" tabindex="-1">';
-                                                echo '    <div class="modal-dialog modal-dialog-centered">';
-                                                echo '        <div class="modal-content">';
-                                                echo '            <form method="POST">';
-                                                echo '                <div class="modal-header">';
-                                                echo '                    <h5 class="modal-title">Update Comment</h5>';
-                                                echo '                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>';
-                                                echo '                </div>';
-                                                echo '                <div class="modal-body">';
-                                                echo '                    <input type="hidden" name="id" value="' . htmlspecialchars($comment['id']) . '">';
-                                                echo '                    <div class="mb-3">';
-                                                echo '                        <label class="form-label">Comment:</label>';
-                                                echo '                        <textarea name="short_comment" class="form-control" required>' . htmlspecialchars($comment['short_comment']) . '</textarea>';
-                                                echo '                    </div>';
-                                                echo '                </div>';
-                                                echo '                <div class="modal-footer">';
-                                                echo '                    <button type="submit" name="update_comment" class="btn btn-primary">Update</button>';
-                                                echo '                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>';
-                                                echo '                </div>';
-                                                echo '            </form>';
-                                                echo '        </div>';
-                                                echo '    </div>';
-                                                echo '</div>';
-                                            }
+                                                    <hr>
+                                                </div>
+                                            <?php endforeach;
                                         } else {
                                             echo '<p>No comments available for this issue.</p>';
                                         }
@@ -496,6 +461,32 @@ if (!$comments) {
             </table>
         </div>
     </div>
+
+    <?php foreach ($comments as $comment): ?>
+        <div class="modal fade" id="updateComment<?= $comment['id']; ?>" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <form method="POST" action="">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Update Comment</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" name="id" value="<?= htmlspecialchars($comment['id']); ?>">
+                            <div class="mb-3">
+                                <label class="form-label">Comment:</label>
+                                <textarea name="short_comment" class="form-control" required><?= htmlspecialchars($comment['short_comment']); ?></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="submit" name="update_comment" class="btn btn-primary">Update</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    <?php endforeach; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
