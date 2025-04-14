@@ -1,4 +1,10 @@
 <?php
+/**
+ * Author: Chase Hamilton, Cis355
+ * Description: This file handles the issues list page, including CRUD operations for issues and comments.
+ * It also includes filtering, sorting, and file upload functionality.
+ */
+
 session_start();
 
 // Check if the user is logged in
@@ -7,12 +13,15 @@ if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
+
 require '../database/database.php'; // Include the database connection
 
 $conn = Database::connect(); // Establish the database connection
 $error_message = "";
 
+// Handle POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Update Comment Handler
     if (isset($_POST['update_comment'])) {
         $id = $_POST['id'];
         $short_comment = trim($_POST['short_comment']);
@@ -272,12 +281,45 @@ if (!$comments) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Page metadata and custom styles -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Issues List - DSR</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar, .table-dark {
+            background-color: #343a40 !important;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #004085;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #bd2130;
+            border-color: #a71d2a;
+        }
+        .modal-header {
+            background-color: #343a40;
+            color: white;
+        }
+        .modal-footer {
+            background-color: #f1f1f1;
+        }
+    </style>
 </head>
 <body>
+    <!-- Main container -->
     <div class="container mt-3">
         <!-- Row with "Logout", "Issues List", "Go to Persons List", and "Create New Issue" -->
         <div class="row mt-3">
@@ -308,8 +350,7 @@ if (!$comments) {
                     <form method="GET" class="d-flex">
                         <input type="hidden" name="filter" value="<?= htmlspecialchars($filter); ?>">
                         <input type="text" name="name_filter" class="form-control me-2" placeholder="Filter by name" value="<?= htmlspecialchars($name_filter); ?>">
-                        <button type="submit" class="btn btn-primary">Filter</button>
-                    </form>
+                        <button type="submit" class="btn btn-primary">Filter</                    </form>
                     <a href="?filter=open&name_filter=<?= urlencode($name_filter); ?>&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-primary <?= $filter === 'open' ? 'active' : ''; ?>">Open Issues</a>
                     <a href="?filter=all&name_filter=<?= urlencode($name_filter); ?>&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-secondary <?= $filter === 'all' ? 'active' : ''; ?>">All Issues</a>
                 </div>

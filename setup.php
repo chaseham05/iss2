@@ -1,4 +1,9 @@
 <?php
+/**
+ * Author: Chase Hamilton, Cis355
+ * Description: This file sets up the database by creating the required tables and populating them with initial data.
+ */
+
 // Configuration
 $host = 'localhost';
 $user = 'root';

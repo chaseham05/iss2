@@ -1,4 +1,9 @@
 <?php
+/**
+ * Author: Chase Hamilton, Cis355
+ * Description: This file handles the login functionality, including user authentication.
+ */
+
 include '../database/database.php';  // Include the database connection
 
 session_start();
@@ -34,6 +39,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <title>Login</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #e9ecef;
+        }
+        .card {
+            border: 1px solid #007bff;
+        }
+        .card-header {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #004085;
+        }
+    </style>
 </head>
 <body>
     <div class="container mt-5">

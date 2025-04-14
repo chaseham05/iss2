@@ -1,4 +1,10 @@
 <?php
+/**
+ * Author: Chase Hamilton, Cis355
+ * Description: This file handles the persons list page, including CRUD operations for managing users.
+ * Only accessible to admin users.
+ */
+
 session_start();
 include '../database/database.php'; // Include the database connection
 
@@ -18,6 +24,7 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') {
 $conn = Database::connect(); // Establish the database connection
 $error_message = "";
 
+// Handle POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Add Person Handler
     if (isset($_POST['add_person'])) {
@@ -89,11 +96,44 @@ $persons = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Page metadata and custom styles -->
     <meta charset="UTF-8">
     <title>Persons List - DSR</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .table-dark {
+            background-color: #343a40 !important;
+        }
+        .btn-success {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #bd2130;
+            border-color: #a71d2a;
+        }
+        .modal-header {
+            background-color: #343a40;
+            color: white;
+        }
+        .modal-footer {
+            background-color: #f1f1f1;
+        }
+    </style>
 </head>
 <body>
+    <!-- Main container -->
     <div class="container mt-3">
         <h2 class="text-center">Persons List</h2>
 

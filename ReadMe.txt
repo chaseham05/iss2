@@ -1,3 +1,6 @@
+Author: Chase Hamilton, Cis355
+Description: This file provides instructions for setting up and testing the application.
+
 Place a database file in an upper subdirectory and
 the file must connect to cis355 and the user is root 
 and password is empty

@@ -7,6 +7,9 @@
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
+-- Author: Chase Hamilton, Cis355
+-- Description: SQL script to create and populate the `iss_issues` table.
+
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
