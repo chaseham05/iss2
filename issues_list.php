@@ -5,6 +5,7 @@ session_start();
 if (!isset($_SESSION['user_id'])) {
     session_destroy(); // Destroy the session if not logged in
     header("Location: login.php");
+    exit();
 }
 require '../database/database.php'; // Include the database connection
 
@@ -33,8 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: issues_list.php");
             exit();
         } catch (PDOException $e) {
-            echo "Error updating comment: " . $e->getMessage();
-            exit();
+            $error_message = "Error updating comment: " . $e->getMessage();
         }
     }
 
@@ -80,157 +80,168 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error_message = "Error deleting comment: " . $e->getMessage();
         }
     }
-}
 
-// Handle issue operations (Update, Delete, Add Comment, Delete Comment, Create Issue)
-if (isset($_POST['update_issue'])) {
-    $id = $_POST['id'];
-    $short_description = trim($_POST['short_description']);
-    $long_description = trim($_POST['long_description']);
-    $open_date = $_POST['open_date'];
-    $close_date = $_POST['close_date'];
-    $priority = $_POST['priority'];
-    $org = trim($_POST['org']);
-    $project = trim($_POST['project']);
-    $per_id = $_POST['per_id'];
+    // Handle issue operations (Update, Delete, Create Issue)
+    if (isset($_POST['update_issue'])) {
+        $id = $_POST['id'];
+        $short_description = trim($_POST['short_description']);
+        $long_description = trim($_POST['long_description']);
+        $open_date = $_POST['open_date'];
+        $close_date = $_POST['close_date'];
+        $priority = $_POST['priority'];
+        $org = trim($_POST['org']);
+        $project = trim($_POST['project']);
 
-    // Check if the user is an admin or the owner of the issue
-    $stmt = $conn->prepare("SELECT per_id FROM iss_issues WHERE id = ?");
-    $stmt->execute([$id]);
-    $issue_owner = $stmt->fetchColumn();
-
-    if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $issue_owner) {
-        die("Unauthorized action. You do not have permission to update this issue.");
-    }
-
-    // Handle PDF upload
-    $attachmentPath = null;
-    if (isset($_FILES['pdf_attachment']) && $_FILES['pdf_attachment']['error'] === UPLOAD_ERR_OK) {
-        $fileTmpPath = $_FILES['pdf_attachment']['tmp_name'];
-        $fileName = $_FILES['pdf_attachment']['name'];
-        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-
-        if ($fileExtension !== 'pdf') {
-            die("Only PDF files are allowed.");
+        // Preserve the existing per_id if not provided in the form
+        $per_id = isset($_POST['per_id']) && !empty($_POST['per_id']) ? $_POST['per_id'] : null;
+        if (!$per_id) {
+            $stmt = $conn->prepare("SELECT per_id FROM iss_issues WHERE id = ?");
+            $stmt->execute([$id]);
+            $per_id = $stmt->fetchColumn();
         }
 
-        if ($_FILES['pdf_attachment']['size'] > 2 * 1024 * 1024) {
-            die("File size exceeds 2MB limit.");
+        // Check if the user is an admin or the owner of the issue
+        if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $per_id) {
+            die("Unauthorized action. You do not have permission to update this issue.");
         }
 
-        $uploadDir = './uploads/';
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
+        // Handle PDF upload
+        $attachmentPath = null;
+        if (isset($_FILES['pdf_attachment']) && $_FILES['pdf_attachment']['error'] === UPLOAD_ERR_OK) {
+            $fileTmpPath = $_FILES['pdf_attachment']['tmp_name'];
+            $fileName = $_FILES['pdf_attachment']['name'];
+            $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+            if ($fileExtension !== 'pdf') {
+                die("Only PDF files are allowed.");
+            }
+
+            if ($_FILES['pdf_attachment']['size'] > 2 * 1024 * 1024) {
+                die("File size exceeds 2MB limit.");
+            }
+
+            $uploadDir = './uploads/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
+            $attachmentPath = $uploadDir . $newFileName;
+
+            if (!move_uploaded_file($fileTmpPath, $attachmentPath)) {
+                die("Error moving the uploaded file.");
+            }
+        } else {
+            // Use existing attachment if no new file is uploaded
+            $existing = $conn->prepare("SELECT pdf_attachment FROM iss_issues WHERE id = ?");
+            $existing->execute([$id]);
+            $attachmentPath = $existing->fetchColumn();
         }
 
-        $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
-        $attachmentPath = $uploadDir . $newFileName;
+        // Update the issue
+        try {
+            $sql = "UPDATE iss_issues SET short_description=?, long_description=?, open_date=?, close_date=?, priority=?, org=?, project=?, per_id=?, pdf_attachment=? WHERE id=?";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$short_description, $long_description, $open_date, $close_date, $priority, $org, $project, $per_id, $attachmentPath, $id]);
 
-        if (!move_uploaded_file($fileTmpPath, $attachmentPath)) {
-            die("Error moving the uploaded file.");
-        }
-    } else {
-        // Use existing attachment if no new file is uploaded
-        $existing = $conn->prepare("SELECT pdf_attachment FROM iss_issues WHERE id = ?");
-        $existing->execute([$id]);
-        $attachmentPath = $existing->fetchColumn();
-    }
-
-    // Update the issue
-    try {
-        $sql = "UPDATE iss_issues SET short_description=?, long_description=?, open_date=?, close_date=?, priority=?, org=?, project=?, per_id=?, pdf_attachment=? WHERE id=?";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$short_description, $long_description, $open_date, $close_date, $priority, $org, $project, $per_id, $attachmentPath, $id]);
-
-        header("Location: issues_list.php");
-        exit();
-    } catch (PDOException $e) {
-        $error_message = "Error updating issue: " . $e->getMessage();
-    }
-}
-
-if (isset($_POST['create_issue'])) {
-    $title = $_POST['title'];
-    $description = $_POST['description'];
-    $status = $_POST['status'];
-    $open_date = $_POST['open_date'];
-    $close_date = $_POST['close_date'];
-    $per_id = $_SESSION['user_id']; // Set the creator's user ID
-
-    $attachmentPath = null;
-    if (isset($_FILES['pdf_attachment']) && $_FILES['pdf_attachment']['error'] === UPLOAD_ERR_OK) {
-        $fileTmpPath = $_FILES['pdf_attachment']['tmp_name'];
-        $fileName = $_FILES['pdf_attachment']['name'];
-        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-
-        if ($fileExtension !== 'pdf') {
-            die("Only PDF files are allowed.");
-        }
-
-        if ($_FILES['pdf_attachment']['size'] > 2 * 1024 * 1024) {
-            die("File size exceeds 2MB limit.");
-        }
-
-        $uploadDir = './uploads/';
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-
-        $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
-        $attachmentPath = $uploadDir . $newFileName;
-
-        if (!move_uploaded_file($fileTmpPath, $attachmentPath)) {
-            die("Error moving the uploaded file.");
+            header("Location: issues_list.php");
+            exit();
+        } catch (PDOException $e) {
+            $error_message = "Error updating issue: " . $e->getMessage();
         }
     }
 
-    try {
-        $sql = "INSERT INTO iss_issues (short_description, long_description, priority, pdf_attachment, open_date, close_date, per_id) 
-                VALUES (:title, :description, :status, :pdf, :open_date, :close_date, :per_id)";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([
-            ':title' => $title,
-            ':description' => $description,
-            ':status' => $status,
-            ':pdf' => $attachmentPath,
-            ':open_date' => $open_date,
-            ':close_date' => $close_date,
-            ':per_id' => $per_id
-        ]);
+    if (isset($_POST['create_issue'])) {
+        $title = $_POST['title'];
+        $description = $_POST['description'];
+        $status = $_POST['status'];
+        $open_date = $_POST['open_date'];
+        $close_date = $_POST['close_date'];
+        $per_id = $_SESSION['user_id']; // Set the creator's user ID
 
-        header("Location: issues_list.php");
-        exit();
-    } catch (PDOException $e) {
-        $error_message = "Error creating issue: " . $e->getMessage();
+        $attachmentPath = null;
+        if (isset($_FILES['pdf_attachment']) && $_FILES['pdf_attachment']['error'] === UPLOAD_ERR_OK) {
+            $fileTmpPath = $_FILES['pdf_attachment']['tmp_name'];
+            $fileName = $_FILES['pdf_attachment']['name'];
+            $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+            if ($fileExtension !== 'pdf') {
+                die("Only PDF files are allowed.");
+            }
+
+            if ($_FILES['pdf_attachment']['size'] > 2 * 1024 * 1024) {
+                die("File size exceeds 2MB limit.");
+            }
+
+            $uploadDir = './uploads/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
+            $attachmentPath = $uploadDir . $newFileName;
+
+            if (!move_uploaded_file($fileTmpPath, $attachmentPath)) {
+                die("Error moving the uploaded file.");
+            }
+        }
+
+        try {
+            $sql = "INSERT INTO iss_issues (short_description, long_description, priority, pdf_attachment, open_date, close_date, per_id) 
+                    VALUES (:title, :description, :status, :pdf, :open_date, :close_date, :per_id)";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([
+                ':title' => $title,
+                ':description' => $description,
+                ':status' => $status,
+                ':pdf' => $attachmentPath,
+                ':open_date' => $open_date,
+                ':close_date' => $close_date,
+                ':per_id' => $per_id
+            ]);
+
+            header("Location: issues_list.php");
+            exit();
+        } catch (PDOException $e) {
+            $error_message = "Error creating issue: " . $e->getMessage();
+        }
     }
-}
 
-if (isset($_POST['delete_issue'])) {
-    $id = $_POST['id'];
+    if (isset($_POST['delete_issue'])) {
+        $id = $_POST['id'];
 
-    // Check if the user is an admin or the owner of the issue
-    $stmt = $conn->prepare("SELECT per_id FROM iss_issues WHERE id = ?");
-    $stmt->execute([$id]);
-    $issue_owner = $stmt->fetchColumn();
+        // Preserve filter and sorting parameters
+        $filter = isset($_GET['filter']) ? $_GET['filter'] : 'open';
+        $name_filter = isset($_GET['name_filter']) ? $_GET['name_filter'] : '';
+        $sort_column = isset($_GET['sort']) ? $_GET['sort'] : 'open_date';
+        $sort_order = isset($_GET['order']) ? $_GET['order'] : 'desc';
 
-    if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $issue_owner) {
-        die("Unauthorized action. You do not have permission to delete this issue.");
-    }
-
-    // Delete the issue
-    try {
-        $sql = "DELETE FROM iss_issues WHERE id=?";
-        $stmt = $conn->prepare($sql);
+        // Check if the user is an admin or the owner of the issue
+        $stmt = $conn->prepare("SELECT per_id FROM iss_issues WHERE id = ?");
         $stmt->execute([$id]);
+        $issue_owner = $stmt->fetchColumn();
 
-        header("Location: issues_list.php");
-        exit();
-    } catch (PDOException $e) {
-        $error_message = "Error deleting issue: " . $e->getMessage();
+        if ($_SESSION['admin'] !== 'Y' && $_SESSION['user_id'] !== $issue_owner) {
+            die("Unauthorized action. You do not have permission to delete this issue.");
+        }
+
+        // Delete the issue
+        try {
+            $sql = "DELETE FROM iss_issues WHERE id=?";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$id]);
+
+            // Redirect back with preserved filters
+            header("Location: issues_list.php?filter=$filter&name_filter=" . urlencode($name_filter) . "&sort=$sort_column&order=$sort_order");
+            exit();
+        } catch (PDOException $e) {
+            $error_message = "Error deleting issue: " . $e->getMessage();
+        }
     }
 }
 
 // Fetch all issues with filtering and sorting
+$name_filter = isset($_GET['name_filter']) ? trim($_GET['name_filter']) : '';
 $filter = isset($_GET['filter']) && $_GET['filter'] === 'all' ? 'all' : 'open';
 $sort_column = isset($_GET['sort']) ? $_GET['sort'] : 'open_date';
 $sort_order = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
@@ -239,9 +250,14 @@ $sql = "SELECT i.*, CONCAT(p.fname, ' ', p.lname) AS person_name
         FROM iss_issues i 
         LEFT JOIN iss_persons p ON i.per_id = p.id 
         WHERE (:filter = 'all' OR i.close_date IS NULL) 
+        AND (:name_filter = '' OR CONCAT(p.fname, ' ', p.lname) LIKE :name_filter_wildcard)
         ORDER BY $sort_column $sort_order";
 $stmt = $conn->prepare($sql);
-$stmt->execute([':filter' => $filter]);
+$stmt->execute([
+    ':filter' => $filter,
+    ':name_filter' => $name_filter,
+    ':name_filter_wildcard' => "%$name_filter%"
+]);
 $issues = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch all comments
@@ -255,30 +271,26 @@ if (!$comments) {
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Issues List - DSR</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-
 <body>
     <div class="container mt-3">
-        <!-- Header Section -->
-        <div class="row mb-3">
+        <!-- Row with "Logout", "Issues List", "Go to Persons List", and "Create New Issue" -->
+        <div class="row mt-3">
             <div class="col-12 d-flex justify-content-between align-items-center">
-                <h2 class="text-center">Issues List</h2>
-                <form method="POST" action="logout.php">
+                <!-- Logout Button -->
+                <form method="POST" action="logout.php" class="me-auto">
                     <button type="submit" class="btn btn-danger">Logout</button>
                 </form>
-            </div>
-        </div>
 
-        <!-- Row with "All Issues", "Go to Persons List", and "Create New Issue" -->
-        <div class="row mt-3">
-            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center">
-                <h3>All Issues</h3>
+                <!-- Issues List Header -->
+                <h2 class="text-center flex-grow-1 m-0">Issues List</h2>
+
+                <!-- Buttons on the Right -->
                 <div class="d-flex flex-wrap gap-2">
                     <?php if (isset($_SESSION['admin']) && $_SESSION['admin'] === 'Y'): ?>
                         <a href="persons_list.php" class="btn btn-secondary">Go to Persons List</a>
@@ -293,9 +305,13 @@ if (!$comments) {
             <div class="col-12 d-flex justify-content-between align-items-center">
                 <h3>All Issues</h3>
                 <div class="d-flex gap-2">
-
-                <a href="?filter=open&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-primary <?= $filter === 'open' ? 'active' : ''; ?>">Open Issues</a>
-                    <a href="?filter=all&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-secondary <?= $filter === 'all' ? 'active' : ''; ?>">All Issues</a>
+                    <form method="GET" class="d-flex">
+                        <input type="hidden" name="filter" value="<?= htmlspecialchars($filter); ?>">
+                        <input type="text" name="name_filter" class="form-control me-2" placeholder="Filter by name" value="<?= htmlspecialchars($name_filter); ?>">
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                    </form>
+                    <a href="?filter=open&name_filter=<?= urlencode($name_filter); ?>&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-primary <?= $filter === 'open' ? 'active' : ''; ?>">Open Issues</a>
+                    <a href="?filter=all&name_filter=<?= urlencode($name_filter); ?>&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-secondary <?= $filter === 'all' ? 'active' : ''; ?>">All Issues</a>
                 </div>
             </div>
         </div>
@@ -325,28 +341,19 @@ if (!$comments) {
                             <td><?= htmlspecialchars($issue['person_name']); ?></td>
                             <td>
                                 <!-- Read Button -->
-                                <button class="btn btn-info btn-sm" data-bs-toggle="modal"
-                                    data-bs-target="#readIssue<?= $issue['id']; ?>">R</button>
+                                <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#readIssue<?= $issue['id']; ?>">R</button>
 
                                 <!-- Update Button -->
-                                <button class="btn btn-warning btn-sm" data-bs-toggle="modal"
-                                    data-bs-target="#updateIssue<?= $issue['id']; ?>"
-                                    <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>
-                                    U
-                                </button>
+                                <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#updateIssue<?= $issue['id']; ?>" <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>U</button>
 
                                 <!-- Delete Button -->
                                 <form method="POST" style="display:inline;">
                                     <input type="hidden" name="id" value="<?= $issue['id']; ?>">
-                                    <button type="submit" name="delete_issue" class="btn btn-danger btn-sm"
-                                        <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>
-                                        D
-                                    </button>
+                                    <button type="submit" name="delete_issue" class="btn btn-danger btn-sm" <?= (!isset($_SESSION['admin']) || $_SESSION['admin'] !== 'Y') && $_SESSION['user_id'] !== $issue['per_id'] ? 'disabled' : ''; ?>>D</button>
                                 </form>
 
                                 <?php if (!empty($issue['pdf_attachment'])): ?>
-                                    <a href="<?= htmlspecialchars($issue['pdf_attachment']); ?>" target="_blank"
-                                        class="btn btn-outline-secondary btn-sm">View PDF</a>
+                                    <a href="<?= htmlspecialchars($issue['pdf_attachment']); ?>" target="_blank" class="btn btn-outline-secondary btn-sm">View PDF</a>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -367,19 +374,15 @@ if (!$comments) {
                                         <p><strong>Close Date:</strong> <?= htmlspecialchars($issue['close_date']); ?></p>
                                         <p><strong>Priority:</strong> <?= htmlspecialchars($issue['priority']); ?></p>
                                         <p><strong>Created By (Person ID):</strong> <?= htmlspecialchars($issue['per_id']); ?></p>
-
-                                        <!-- Comments Section -->
-                                        <hr>
                                         <h6>Comments:</h6>
+                                        <hr>
                                         <?php
                                         // Fetch comments for the current issue
-                                        $stmt = $conn->prepare("
-                                            SELECT c.*, CONCAT(p.fname, ' ', p.lname) AS author_name 
-                                            FROM iss_comments c 
-                                            LEFT JOIN iss_persons p ON c.per_id = p.id 
-                                            WHERE c.iss_id = ? 
-                                            ORDER BY c.id ASC
-                                        ");
+                                        $stmt = $conn->prepare("SELECT c.*, CONCAT(p.fname, ' ', p.lname) AS author_name 
+                                                                FROM iss_comments c 
+                                                                LEFT JOIN iss_persons p ON c.per_id = p.id 
+                                                                WHERE c.iss_id = ? 
+                                                                ORDER BY c.id ASC");
                                         $stmt->execute([$issue['id']]);
                                         $issue_comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -389,7 +392,6 @@ if (!$comments) {
                                                     <p><strong>Comment ID:</strong> <?= htmlspecialchars($comment['id']); ?></p>
                                                     <p><strong>Comment:</strong> <?= htmlspecialchars($comment['short_comment']); ?></p>
                                                     <p><strong>Author:</strong> <?= htmlspecialchars($comment['author_name'] ?? 'Unknown'); ?> (ID: <?= htmlspecialchars($comment['per_id']); ?>)</p>
-
                                                     <?php if (isset($_SESSION['admin']) && $_SESSION['admin'] === 'Y' || $_SESSION['user_id'] === $comment['per_id']): ?>
                                                         <!-- Update Button -->
                                                         <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#updateComment<?= $comment['id']; ?>">Update</button>
@@ -400,18 +402,15 @@ if (!$comments) {
                                                             <button type="submit" name="delete_comment" class="btn btn-danger btn-sm">Delete</button>
                                                         </form>
                                                     <?php endif; ?>
-
-                                                    <hr>
                                                 </div>
+                                                <hr>
                                             <?php endforeach;
                                         } else {
                                             echo '<p>No comments available for this issue.</p>';
                                         }
                                         ?>
-
-                                        <!-- Add Comment Section -->
-                                        <hr>
                                         <h6>Add a Comment:</h6>
+                                        <hr>
                                         <form method="POST">
                                             <input type="hidden" name="issue_id" value="<?= $issue['id']; ?>">
                                             <input type="hidden" name="author" value="<?= $_SESSION['user_id']; ?>">
@@ -433,11 +432,11 @@ if (!$comments) {
                         <div class="modal fade" id="updateIssue<?= $issue['id']; ?>" tabindex="-1">
                             <div class="modal-dialog modal-dialog-centered">
                                 <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Update Issue</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
                                     <form method="POST" enctype="multipart/form-data">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title">Update Issue</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
                                         <div class="modal-body">
                                             <input type="hidden" name="id" value="<?= $issue['id']; ?>">
                                             <div class="mb-3">
@@ -490,11 +489,11 @@ if (!$comments) {
     <div class="modal fade" id="createIssueModal" tabindex="-1" aria-labelledby="createIssueModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createIssueModalLabel">Create New Issue</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
                 <form method="POST" enctype="multipart/form-data">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="createIssueModalLabel">Create New Issue</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
                     <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Title:</label>
@@ -513,7 +512,7 @@ if (!$comments) {
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Open Date:</label>
-                            <input type="date" name="open_date" class="form-control" required>
+                            <input type="date" name="open_date" class="form-control" value="<?= date('Y-m-d'); ?>" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Close Date:</label>
@@ -537,11 +536,11 @@ if (!$comments) {
         <div class="modal fade" id="updateComment<?= $comment['id']; ?>" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Update Comment</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
                     <form method="POST" action="">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Update Comment</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
                         <div class="modal-body">
                             <input type="hidden" name="id" value="<?= htmlspecialchars($comment['id']); ?>">
                             <div class="mb-3">
@@ -561,7 +560,6 @@ if (!$comments) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-
 </html>
 
 <?php Database::disconnect(); ?>

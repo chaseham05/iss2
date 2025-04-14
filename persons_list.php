@@ -25,12 +25,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lname = trim($_POST['lname']);
         $email = trim($_POST['email']);
         $mobile = trim($_POST['mobile']);
+        $password = password_hash($_POST['password'], PASSWORD_DEFAULT); // Hash the password
         $admin = isset($_POST['admin']) ? 'Y' : 'N';
 
         try {
-            $sql = "INSERT INTO iss_persons (fname, lname, email, mobile, admin) VALUES (?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO iss_persons (fname, lname, email, mobile, pwd_hash, admin) VALUES (?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$fname, $lname, $email, $mobile, $admin]);
+            $stmt->execute([$fname, $lname, $email, $mobile, $password, $admin]);
 
             header("Location: persons_list.php");
             exit();
@@ -167,6 +168,10 @@ $persons = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
                         <div class="mb-3">
                             <label class="form-label">Mobile:</label>
                             <input type="text" name="mobile" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password:</label>
+                            <input type="password" name="password" class="form-control" required>
                         </div>
                         <div class="form-check">
                             <input type="checkbox" name="admin" class="form-check-input" id="adminCheck">
