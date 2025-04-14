@@ -230,9 +230,19 @@ if (isset($_POST['delete_issue'])) {
     }
 }
 
-// Fetch all issues
-$sql = "SELECT * FROM iss_issues ORDER BY open_date DESC";
-$issues = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+// Fetch all issues with filtering and sorting
+$filter = isset($_GET['filter']) && $_GET['filter'] === 'all' ? 'all' : 'open';
+$sort_column = isset($_GET['sort']) ? $_GET['sort'] : 'open_date';
+$sort_order = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
+
+$sql = "SELECT i.*, CONCAT(p.fname, ' ', p.lname) AS person_name 
+        FROM iss_issues i 
+        LEFT JOIN iss_persons p ON i.per_id = p.id 
+        WHERE (:filter = 'all' OR i.close_date IS NULL) 
+        ORDER BY $sort_column $sort_order";
+$stmt = $conn->prepare($sql);
+$stmt->execute([':filter' => $filter]);
+$issues = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch all comments
 $comments_sql = "SELECT * FROM iss_comments ORDER BY iss_id ASC";
@@ -278,16 +288,29 @@ if (!$comments) {
             </div>
         </div>
 
+        <!-- Filter and Sort Controls -->
+        <div class="row mt-3">
+            <div class="col-12 d-flex justify-content-between align-items-center">
+                <h3>All Issues</h3>
+                <div class="d-flex gap-2">
+
+                <a href="?filter=open&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-primary <?= $filter === 'open' ? 'active' : ''; ?>">Open Issues</a>
+                    <a href="?filter=all&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-secondary <?= $filter === 'all' ? 'active' : ''; ?>">All Issues</a>
+                </div>
+            </div>
+        </div>
+
         <!-- Responsive Table -->
         <div class="table-responsive mt-2">
             <table class="table table-striped table-sm">
                 <thead class="table-dark">
                     <tr>
-                        <th>ID</th>
-                        <th>Short Description</th>
-                        <th>Open Date</th>
-                        <th>Close Date</th>
-                        <th>Priority</th>
+                        <th><a href="?filter=<?= $filter; ?>&sort=id&order=<?= $sort_column === 'id' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">ID</a></th>
+                        <th><a href="?filter=<?= $filter; ?>&sort=short_description&order=<?= $sort_column === 'short_description' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Short Description</a></th>
+                        <th><a href="?filter=<?= $filter; ?>&sort=open_date&order=<?= $sort_column === 'open_date' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Open Date</a></th>
+                        <th><a href="?filter=<?= $filter; ?>&sort=close_date&order=<?= $sort_column === 'close_date' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Close Date</a></th>
+                        <th><a href="?filter=<?= $filter; ?>&sort=priority&order=<?= $sort_column === 'priority' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Priority</a></th>
+                        <th><a href="?filter=<?= $filter; ?>&sort=person_name&order=<?= $sort_column === 'person_name' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Person</a></th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -299,6 +322,7 @@ if (!$comments) {
                             <td><?= htmlspecialchars($issue['open_date']); ?></td>
                             <td><?= htmlspecialchars($issue['close_date']); ?></td>
                             <td><?= htmlspecialchars($issue['priority']); ?></td>
+                            <td><?= htmlspecialchars($issue['person_name']); ?></td>
                             <td>
                                 <!-- Read Button -->
                                 <button class="btn btn-info btn-sm" data-bs-toggle="modal"
@@ -459,6 +483,53 @@ if (!$comments) {
                     <?php endforeach; ?>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Create New Issue Modal -->
+    <div class="modal fade" id="createIssueModal" tabindex="-1" aria-labelledby="createIssueModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="createIssueModalLabel">Create New Issue</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Title:</label>
+                            <input type="text" name="title" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description:</label>
+                            <textarea name="description" class="form-control" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status:</label>
+                            <select name="status" class="form-control" required>
+                                <option value="Open">Open</option>
+                                <option value="Closed">Closed</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Open Date:</label>
+                            <input type="date" name="open_date" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Close Date:</label>
+                            <input type="date" name="close_date" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Attach PDF (Max 2MB):</label>
+                            <input type="file" name="pdf_attachment" class="form-control" accept="application/pdf">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" name="create_issue" class="btn btn-primary">Create Issue</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 

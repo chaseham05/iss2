@@ -43,7 +43,8 @@ CREATE TABLE `iss_persons` (
 --
 
 INSERT INTO `iss_persons` (`id`, `fname`, `lname`, `mobile`, `email`, `pwd_hash`, `pwd_salt`, `admin`) VALUES
-(1, 'George', 'Corser', '989-780-3168', 'gpcorser@svsu.edu', '0532493a0cb21d6ec931886d1becded2', 'splyxxy', 'Y');
+(1, 'AdminUser', 'LastName', '989-123-1234', 'email@gmail.com', '$2y$10$xU3gK6RBb/AbxvS6vyIAK.cvPl2kl5YZK7VQvZH8aNgkYYqH3xtkW', '', 'Y'),
+(2, 'NonAdmin', 'LastName', '111-111-1111', 'nonadmin@gmail.com', '$2y$10$0HCeW3sBUK0cbsfA7VTdwuG7futQkoV3dzdh38dxVUecGepGJYRT6', '', 'N' );
 
 --
 -- Indexes for dumped tables

@@ -77,8 +77,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch all persons
-$sql = "SELECT * FROM iss_persons ORDER BY lname ASC";
+// Fetch all persons with sorting
+$sort_column = isset($_GET['sort']) ? $_GET['sort'] : 'lname';
+$sort_order = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
+
+$sql = "SELECT * FROM iss_persons ORDER BY $sort_column $sort_order";
 $persons = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
@@ -105,12 +108,12 @@ $persons = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
         <table class="table table-striped table-sm mt-2">
             <thead class="table-dark">
                 <tr>
-                    <th>ID</th>
-                    <th>First Name</th>
-                    <th>Last Name</th>
-                    <th>Email</th>
-                    <th>Mobile</th>
-                    <th>Admin</th>
+                    <th><a href="?sort=id&order=<?= $sort_column === 'id' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">ID</a></th>
+                    <th><a href="?sort=fname&order=<?= $sort_column === 'fname' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">First Name</a></th>
+                    <th><a href="?sort=lname&order=<?= $sort_column === 'lname' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Last Name</a></th>
+                    <th><a href="?sort=email&order=<?= $sort_column === 'email' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Email</a></th>
+                    <th><a href="?sort=mobile&order=<?= $sort_column === 'mobile' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Mobile</a></th>
+                    <th><a href="?sort=admin&order=<?= $sort_column === 'admin' && $sort_order === 'ASC' ? 'desc' : 'asc'; ?>">Admin</a></th>
                     <th>Actions</th>
                 </tr>
             </thead>
