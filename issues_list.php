@@ -344,13 +344,14 @@ if (!$comments) {
 
         <!-- Filter and Sort Controls -->
         <div class="row mt-3">
-            <div class="col-12 d-flex justify-content-between align-items-center">
+            <div class="col-12 d-flex justify-content-between align-items-center flex-wrap">
                 <h3>All Issues</h3>
-                <div class="d-flex gap-2">
-                    <form method="GET" class="d-flex">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <form method="GET" class="d-flex align-items-center">
                         <input type="hidden" name="filter" value="<?= htmlspecialchars($filter); ?>">
                         <input type="text" name="name_filter" class="form-control me-2" placeholder="Filter by name" value="<?= htmlspecialchars($name_filter); ?>">
-                        <button type="submit" class="btn btn-primary">Filter</                    </form>
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                    </form>
                     <a href="?filter=open&name_filter=<?= urlencode($name_filter); ?>&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-primary <?= $filter === 'open' ? 'active' : ''; ?>">Open Issues</a>
                     <a href="?filter=all&name_filter=<?= urlencode($name_filter); ?>&sort=<?= $sort_column; ?>&order=<?= $sort_order; ?>" class="btn btn-outline-secondary <?= $filter === 'all' ? 'active' : ''; ?>">All Issues</a>
                 </div>
